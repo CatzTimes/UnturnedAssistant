@@ -42,6 +42,14 @@ if ($LASTEXITCODE -ne 0) { throw 'jar 打包失败' }
 Copy-Item $JarPath $Stage
 
 Write-Host '== 4/5 jpackage app-image =='
+# jpackage 不允许目标目录已存在；残留或被占用（杀软扫描/应用运行中）时显式清理并给出可读错误
+if (Test-Path $AppDir) {
+    try {
+        Remove-Item $AppDir -Recurse -Force -ErrorAction Stop
+    } catch {
+        throw "无法删除旧的 app-image 目录: $AppDir（请确认 UnturnedAssistant 未在运行后重试）"
+    }
+}
 & (Join-Path $Jdk27 'bin\jpackage.exe') --type app-image `
     --input $Stage --main-jar 'UnturnedAssistant.jar' --main-class 'Start' `
     --name 'UnturnedAssistant' --app-version $Version --vendor 'CatzTimes' `

@@ -256,6 +256,13 @@ public final class AssetScanner {
             targetGuid = metadata.getString("TargetAsset");
         }
         boolean bypass = data.has("Bypass_ID_Limit") || body.has("Bypass_ID_Limit");
+        boolean pro = data.has("Pro") || body.has("Pro");
+
+        AssetCategory category = TypeRegistry.resolve(typeStr);
+        // Pro 标记 = 官方 Steam 经济（皮肤基底）物品，玩家视角不是可用物品
+        if (pro && category == AssetCategory.ITEM) {
+            return null;
+        }
 
         int[] id = parseId(rawId);
         // 无 legacy ID 的资产（皮肤基底等 GUID-only 物品）无法按 ID 查找，不属于 ID 表范畴
@@ -264,7 +271,7 @@ public final class AssetScanner {
         }
         String[] origin = originOf(dir);
         return new AssetRecord(
-                TypeRegistry.resolve(typeStr),
+                category,
                 typeStr == null ? "" : typeStr.strip(),
                 id[0], id[1] == 1, rawId == null ? "" : rawId.strip(),
                 guid, internalNameOf(dir, assetFile),
