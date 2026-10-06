@@ -7,6 +7,7 @@ import io.scan.AssetRecord;
 import io.scan.AssetScanner;
 import io.scan.RootPlanner;
 
+import javax.imageio.ImageIO;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JFileChooser;
@@ -24,6 +25,7 @@ import javax.swing.plaf.FontUIResource;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.io.File;
+import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
@@ -93,6 +95,14 @@ public class Displayer extends JFrame {
         } catch (Exception ignored) {
         }
         setUIFont();
+        // 窗口/任务栏图标
+        var iconUrl = Displayer.class.getResource("/assets/icon.jpg");
+        if (iconUrl != null) {
+            try {
+                setIconImage(ImageIO.read(iconUrl));
+            } catch (IOException ignored) {
+            }
+        }
         for (AssetCategory category : AssetCategory.values()) {
             JCheckBox box = new JCheckBox(category.getName(), true);
             categoryBoxes.put(category, box);

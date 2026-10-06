@@ -50,9 +50,14 @@ if (Test-Path $AppDir) {
         throw "无法删除旧的 app-image 目录: $AppDir（请确认 UnturnedAssistant 未在运行后重试）"
     }
 }
+# 把 Resources/assets/icon.jpg 转成多尺寸 .ico 供 exe 使用
+$IconPath = Join-Path $Out 'icon.ico'
+& (Join-Path $Jdk27 'bin\java.exe') -cp $Classes io.tools.IcoGenerator (Join-Path $Root 'Resources\assets\icon.jpg') $IconPath
+if ($LASTEXITCODE -ne 0) { throw '图标转换失败' }
 & (Join-Path $Jdk27 'bin\jpackage.exe') --type app-image `
     --input $Stage --main-jar 'UnturnedAssistant.jar' --main-class 'Start' `
     --name 'UnturnedAssistant' --app-version $Version --vendor 'CatzTimes' `
+    --icon $IconPath `
     --dest $Dist
 if ($LASTEXITCODE -ne 0) { throw 'jpackage 失败' }
 Write-Host "app-image 完成: $AppDir"
