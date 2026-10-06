@@ -409,9 +409,12 @@ public final class AssetScanner {
 
         for (AssetRecord record : records) {
             if (record.getId() > 0) {
-                AssetRecord winner = activeById.get(record.getCategory() + "#" + record.getId());
-                if (winner != null && winner != record) {
-                    record.addNote(getI18nText("gui.note.conflict") + winner.getOrigin() + ")");
+                // 游戏对 OBJECT 类别的 legacy ID 冲突静默忽略（物体以 GUID 寻址，ID 是无意义占位），不标注
+                if (record.getCategory() != AssetCategory.OBJECT) {
+                    AssetRecord winner = activeById.get(record.getCategory() + "#" + record.getId());
+                    if (winner != null && winner != record) {
+                        record.addNote(getI18nText("gui.note.conflict") + winner.getOrigin() + ")");
+                    }
                 }
                 if (!"vanilla".equals(record.getOriginKind())) {
                     int limit = reservedLimit(record.getCategory());

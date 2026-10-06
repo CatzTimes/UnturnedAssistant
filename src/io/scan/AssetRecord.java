@@ -204,7 +204,9 @@ public final class AssetRecord {
         if (includeOrigin) {
             sb.append("  (").append(origin).append(')');
         }
-        if (id <= 0 && !guid.isEmpty()) {
+        // 物体以 GUID 为准（legacy ID 是无意义占位），始终显示 GUID；其他类别仅无 ID 时显示
+        if ((!guid.isEmpty() && category == AssetCategory.OBJECT)
+                || (id <= 0 && !guid.isEmpty())) {
             sb.append("  GUID:").append(guid);
         }
         for (String note : notes) {
