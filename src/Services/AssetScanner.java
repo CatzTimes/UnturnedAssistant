@@ -114,6 +114,10 @@ public final class AssetScanner {
                     if (progress.cancelled()) {
                         return FileVisitResult.SKIP_SUBTREE;
                     }
+                    // 防 junction/符号链接循环：超过深度上限的层级不再下探
+                    if (root.relativize(dir).getNameCount() > AppConfig.MAX_SCAN_DEPTH) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
                     // 与游戏运行时一致：工坊的地图包与 UI 本地化包不承载资产
                     if (isSkippableWorkshopPackage(dir)) {
                         return FileVisitResult.SKIP_SUBTREE;

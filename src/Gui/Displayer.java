@@ -33,6 +33,7 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.EnumMap;
@@ -87,12 +88,14 @@ public class Displayer extends JFrame {
     }
 
     private void initComponents() {
-        // 全局兜底：任何未捕获异常显示在输出区并恢复按钮，而不是无响应
-        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
-            out.append(getI18nText("gui.error") + "\n" + thread + "\n");
-            throwable.printStackTrace(new PrintWriter(
-                    new OutputStreamWriter(new JTextAreaWithInputStream(out), StandardCharsets.UTF_8), true));
-        });
+        // 全局兜底：任何未捕获异常显示在输出区并恢复按钮，而不是无响应。
+        // 可能由后台线程触发，JTextArea 不是线程安全的，统一调度到 EDT
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) ->
+                SwingUtilities.invokeLater(() -> {
+                    out.append(getI18nText("gui.error") + "\n" + thread + "\n");
+                    throwable.printStackTrace(new PrintWriter(
+                            new OutputStreamWriter(new JTextAreaWithInputStream(out), StandardCharsets.UTF_8), true));
+                }));
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
         } catch (Exception ignored) {
@@ -207,7 +210,14 @@ public class Displayer extends JFrame {
             out.setText(getI18nText("gui.path.empty"));
             return;
         }
-        Path selected = Path.of(input);
+        Path selected;
+        try {
+            selected = Path.of(input);
+        } catch (InvalidPathException e) {
+            // Windows 路径非法字符（如半角冒号/引号残留）
+            out.setText(getI18nText("gui.path.invalid") + "\n" + input);
+            return;
+        }
         if (!Files.isDirectory(selected)) {
             out.setText(getI18nText("gui.path.invalid") + "\n" + input);
             return;

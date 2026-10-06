@@ -114,8 +114,9 @@ public final class SteamDetector {
 
     /** 读取注册表值；失败返回 null（不抛异常，探测失败时 GUI 会提示手动选择）。 */
     private static String regQuery(String key, String valueName) {
+        Process process = null;
         try {
-            Process process = new ProcessBuilder("reg", "query", key, "/v", valueName)
+            process = new ProcessBuilder("reg", "query", key, "/v", valueName)
                     .redirectErrorStream(true)
                     .start();
             String output;
@@ -123,7 +124,9 @@ public final class SteamDetector {
                     new InputStreamReader(process.getInputStream(), Charset.defaultCharset()))) {
                 output = reader.lines().collect(Collectors.joining("\n"));
             }
-            process.waitFor(5, TimeUnit.SECONDS);
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                return null; // 超时，finally 中强制销毁
+            }
             for (String line : output.split("\n")) {
                 int idx = line.indexOf("REG_SZ");
                 if (idx >= 0) {
@@ -131,6 +134,11 @@ public final class SteamDetector {
                 }
             }
         } catch (Exception ignored) {
+        } finally {
+            // 无论成功、超时还是异常都确保不留悬挂进程
+            if (process != null) {
+                process.destroyForcibly();
+            }
         }
         return null;
     }

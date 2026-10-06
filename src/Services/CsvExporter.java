@@ -49,6 +49,10 @@ public final class CsvExporter {
             row.append(',');
         }
         String field = value == null ? "" : value;
+        // CSV 公式注入防护（OWASP）：Excel 会把以 = + - @ 开头的单元格当公式执行
+        if (!field.isEmpty() && "=+-@".indexOf(field.charAt(0)) >= 0) {
+            field = "'" + field;
+        }
         if (field.contains(",") || field.contains("\"") || field.contains("\n") || field.contains("\r")) {
             field = '"' + field.replace("\"", "\"\"") + '"';
         }

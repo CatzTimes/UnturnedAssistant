@@ -24,13 +24,19 @@ public final class DatParser {
     }
 
     public static DatNode parseFile(Path file) throws IOException {
-        String text = Files.readString(file, StandardCharsets.UTF_8);
+        // 与游戏一致（AssetsWorker.cs:395 的 StreamReader 为宽松解码）：非 UTF-8 文件
+        // （如 GBK 编码的中文模组）不因解码失败被跳过，非法字节替换为 U+FFFD，
+        // ASCII 结构键（ID/Type/GUID）不受影响
+        String text = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
         // 部分模组的 English.dat 带 UTF-8 BOM（如记事本保存），不剥离会污染首个键
         if (!text.isEmpty() && text.charAt(0) == '\uFEFF') {
             text = text.substring(1);
         }
         return parse(text);
     }
+
+    /** 嵌套深度上限：防御畸形文件（成千上万个开括号）撑爆内存。 */
+    private static final int MAX_DEPTH = 64;
 
     public static DatNode parse(String text) {
         Frame root = new Frame(new DatNode());
@@ -47,12 +53,18 @@ public final class DatParser {
 
             switch (trimmed) {
                 case "{" -> {
+                    if (stack.size() >= MAX_DEPTH) {
+                        continue; // 超限丢弃更深的嵌套
+                    }
                     DatNode child = new DatNode();
                     attachPending(current, child);
                     stack.push(new Frame(child));
                     continue;
                 }
                 case "[" -> {
+                    if (stack.size() >= MAX_DEPTH) {
+                        continue;
+                    }
                     List<Object> child = new ArrayList<>();
                     attachPending(current, child);
                     stack.push(new Frame(child));

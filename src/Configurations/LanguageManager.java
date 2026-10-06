@@ -38,7 +38,15 @@ public final class LanguageManager {
         }
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             String line;
+            boolean first = true;
             while ((line = reader.readLine()) != null) {
+                if (first) {
+                    // 若语言文件被存成带 BOM 的 UTF-8，剥离以免污染首个键
+                    if (line.startsWith("\uFEFF")) {
+                        line = line.substring(1);
+                    }
+                    first = false;
+                }
                 int split = line.indexOf('=');
                 if (split > 0) {
                     MAPPINGS.putIfAbsent(line.substring(0, split).strip(), line.substring(split + 1));

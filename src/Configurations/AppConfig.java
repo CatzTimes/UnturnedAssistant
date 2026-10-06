@@ -12,6 +12,8 @@ public final class AppConfig {
     /** 扫描线程数上下限（按 CPU 核数在区间内取值）。 */
     public static final int SCANNER_MIN_THREADS = 2;
     public static final int SCANNER_MAX_THREADS = 8;
+    /** 目录遍历深度上限：防 junction/符号链接循环无限增长（远超正常资产层级）。 */
+    public static final int MAX_SCAN_DEPTH = 64;
 
     private AppConfig() {
     }
