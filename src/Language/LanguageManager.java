@@ -1,33 +1,50 @@
 package Language;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Locale;
-import java.util.Scanner;
+import java.util.Map;
 
-public class LanguageManager {
-    private final static LanguageManager languageManager = new LanguageManager();
-    private HashMap<String, String> languageMappings = new HashMap<>();
+/** 轻量 i18n：加载失败或键缺失时回退原文，绝不抛异常。 */
+public final class LanguageManager {
+
+    private static final Map<String, String> MAPPINGS = new HashMap<>();
+
+    static {
+        String locale = Locale.getDefault().toString();
+        load(locale);
+        if (MAPPINGS.isEmpty()) {
+            load("zh_CN");
+        }
+        if (MAPPINGS.isEmpty()) {
+            load("en_US");
+        }
+    }
 
     private LanguageManager() {
-        loadLanguageFiles(Locale.getDefault().toString());
     }
 
     public static String getI18nText(String key) {
-        return languageManager.languageMappings.getOrDefault(key, key);
+        return MAPPINGS.getOrDefault(key, key);
     }
 
-
-    private void loadLanguageFiles(String locale) {
-        Scanner scanner = new Scanner(getClass().getResourceAsStream("/assets/lang/" + locale + ".lang"), "UTF-8").useDelimiter("\n");
-        while (scanner.hasNext()) {
-            String[] strings = scanner.next().split("=", 2);
-                if (strings.length == 2) {
-                    languageMappings.put(strings[0], strings[1]);
-                }
+    private static void load(String locale) {
+        var stream = LanguageManager.class.getResourceAsStream("/assets/lang/" + locale + ".lang");
+        if (stream == null) {
+            return;
         }
-        //fallback to zh_CN
-        if (languageMappings.isEmpty()) {
-            loadLanguageFiles("zh_CN");
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                int split = line.indexOf('=');
+                if (split > 0) {
+                    MAPPINGS.putIfAbsent(line.substring(0, split).strip(), line.substring(split + 1));
+                }
+            }
+        } catch (IOException ignored) {
         }
     }
 }

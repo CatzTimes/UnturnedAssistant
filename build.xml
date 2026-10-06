@@ -60,7 +60,7 @@
   <dirname property="module.unturnedassistant.basedir" file="${ant.file}"/>
 
 
-  <property name="compiler.args.unturnedassistant" value="-encoding UTF-8 -source 8 -target 8 ${compiler.args}"/>
+  <property name="compiler.args.unturnedassistant" value="-encoding UTF-8 --release 27 ${compiler.args}"/>
 
   <property name="unturnedassistant.output.dir"
             value="${module.unturnedassistant.basedir}/out/production/UnturnedAssistant"/>

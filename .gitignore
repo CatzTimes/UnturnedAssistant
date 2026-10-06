@@ -1,0 +1,10 @@
+# 构建产物
+out/
+dist/
+tools/
+
+# IDE
+.idea/
+*.log
+.mimosa/
+outclasses/

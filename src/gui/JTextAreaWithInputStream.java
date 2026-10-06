@@ -1,28 +1,22 @@
 package gui;
 
-import javax.swing.*;
+import javax.swing.JTextArea;
 import java.io.OutputStream;
 
+/** 把异常栈输出重定向到界面文本区。 */
 class JTextAreaWithInputStream extends OutputStream {
-    private final JTextArea jTextArea;
 
-    JTextAreaWithInputStream(JTextArea jTextArea) {
-        this.jTextArea = jTextArea;
-    }
+    private final JTextArea textArea;
 
-    private void append(String str) {
-        jTextArea.append(str);
+    JTextAreaWithInputStream(JTextArea textArea) {
+        this.textArea = textArea;
     }
 
     @Override
     public void write(int b) {
-        switch (b) {
-            case '\n':
-                append("\n");
-            case '\r':
-                return;
-            default:
-                append(String.valueOf((char) b));
+        if (b == '\r') {
+            return;
         }
+        textArea.append(String.valueOf((char) b));
     }
 }

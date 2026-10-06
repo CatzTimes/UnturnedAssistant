@@ -1,231 +1,315 @@
-
 package gui;
 
+import io.csv.CsvExporter;
+import io.detect.SteamDetector;
+import io.scan.AssetCategory;
+import io.scan.AssetRecord;
+import io.scan.AssetScanner;
+import io.scan.RootPlanner;
 
-import io.BATFileVisitor;
-import io.item.ItemLibrary;
-import io.item.LocalizableItem;
-
-import javax.swing.*;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.ProgressMonitor;
+import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
+import javax.swing.UIManager;
+import javax.swing.WindowConstants;
 import javax.swing.plaf.FontUIResource;
-import java.awt.*;
+import java.awt.FlowLayout;
+import java.awt.Font;
 import java.io.File;
-import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDate;
-import java.util.LinkedList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
 import static Language.LanguageManager.getI18nText;
 import static javax.swing.JFileChooser.DIRECTORIES_ONLY;
 
+/**
+ * 主界面：启动即后台自动检测 Steam/Unturned 目录并填入（不再默认 "."），
+ * 手动输入的路径做了去引号/容错校验，扫描在后台并行执行，支持真实进度与取消，
+ * 结果可导出 CSV。
+ */
 public class Displayer extends JFrame {
-    private JFileChooser pathChooser;
-    private JTextArea out;
-    private JPanel selectPanel;
-    private JPanel pathPanel;
-    private JPanel startPanel;
-    private JCheckBox workShopCheck;
-    private JButton selectButton;
-    private JButton startButton;
-    private JTextField path;
-    private ProgressMonitor pm;
 
-    public Displayer(String path) {
+    private static final String VERSION = "V4.0";
+
+    private final JTextField pathField = new JTextField(34);
+    private final JTextArea out = new JTextArea();
+    private final JCheckBox workshopCheck = new JCheckBox(getI18nText("gui.checkbox.workshop"));
+    private final JPanel selectPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    private final Map<AssetCategory, JCheckBox> categoryBoxes = new EnumMap<>(AssetCategory.class);
+    private final JButton selectButton = new JButton(getI18nText("gui.button.filechoose"));
+    private final JButton startButton = new JButton(getI18nText("gui.button.start"));
+    private final JButton csvButton = new JButton(getI18nText("gui.button.csv"));
+    private final JFileChooser pathChooser = new JFileChooser();
+
+    private volatile SteamDetector.Locations detected;
+    private ProgressMonitor progress;
+    private List<AssetRecord> lastResult = List.of();
+
+    public Displayer() {
         initComponents();
         setUpComponents();
         addComponents();
-        pathChooser.setCurrentDirectory(new File(path));
-        this.path.setText(path);
+        detectSteamAsync();
         pack();
     }
 
-    //设置默认字体
-    //https://stackoverflow.com/questions/51194267/set-default-font-of-swing-application-once-even-even-if-new-text-is-drawn
     private static void setUIFont() {
-        FontUIResource f = new FontUIResource("Sans", Font.PLAIN, 12);
-        java.util.Enumeration keys = UIManager.getDefaults().keys();
+        FontUIResource font = new FontUIResource("Sans", Font.PLAIN, 12);
+        var keys = UIManager.getDefaults().keys();
         while (keys.hasMoreElements()) {
             Object key = keys.nextElement();
-            Object value = UIManager.get(key);
-            if (value instanceof FontUIResource)
-                UIManager.put(key, f);
+            if (UIManager.get(key) instanceof FontUIResource) {
+                UIManager.put(key, font);
+            }
         }
     }
 
-    private void reset() {
-        pm.setProgress(100);
-        selectButton.setEnabled(true);
-        startButton.setEnabled(true);
-    }
     private void initComponents() {
-        String version = "V3.9";
-        //设置默认异常捕获
-        Thread.setDefaultUncaughtExceptionHandler((t, e) ->
-        {
-            out.append(getI18nText("gui.error") + "\n" + t.toString() + "\n");
-            e.printStackTrace(new PrintWriter(new OutputStreamWriter(new JTextAreaWithInputStream(out), StandardCharsets.UTF_8), true));
-            reset();
+        // 全局兜底：任何未捕获异常显示在输出区并恢复按钮，而不是无响应
+        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
+            out.append(getI18nText("gui.error") + "\n" + thread + "\n");
+            throwable.printStackTrace(new PrintWriter(
+                    new OutputStreamWriter(new JTextAreaWithInputStream(out), StandardCharsets.UTF_8), true));
         });
-        //将UI设置在所有组件的前面
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-            setUIFont();
+        } catch (Exception ignored) {
         }
-        catch (Exception ignore) {
+        setUIFont();
+        for (AssetCategory category : AssetCategory.values()) {
+            JCheckBox box = new JCheckBox(category.getName(), true);
+            categoryBoxes.put(category, box);
+            selectPanel.add(box);
         }
-        //创建所有组件
-        pm = new ProgressMonitor(this, "", getI18nText("gui.processing"), 0, 100);
-        pathChooser = new JFileChooser();
-        out = new JTextArea();
-        selectPanel = new JPanel();
-        pathPanel = new JPanel();
-        startPanel = new JPanel();
-        workShopCheck = new JCheckBox(getI18nText("gui.checkbox.workshop"));
-        selectButton = new JButton(getI18nText("gui.button.filechoose"));
-        startButton = new JButton(getI18nText("gui.button.start"));
-        path = new JTextField();
-        setTitle(getI18nText("gui.title") + version);
-        setLayout(new BoxLayout(getContentPane(), BoxLayout.Y_AXIS));
-        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+        out.setRows(32);
+        out.setEditable(false);
+        setTitle(getI18nText("gui.title") + VERSION);
+        setLayout(new javax.swing.BoxLayout(getContentPane(), javax.swing.BoxLayout.Y_AXIS));
+        setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
     }
 
     private void setUpComponents() {
-        //设置选择框
-        for (ItemLibrary item : ItemLibrary.values()) {
-            if (!item.equals(ItemLibrary.Ordinal)) {
-                selectPanel.add(new JCheckBox(item.getName(), true));
-            }
-        }
-        //设置选择按钮
-        selectButton.addActionListener((Action) -> {
+        selectButton.addActionListener(event -> {
             pathChooser.setFileSelectionMode(DIRECTORIES_ONLY);
             pathChooser.setDialogTitle(getI18nText("gui.button.filechoose.title"));
             pathChooser.setApproveButtonText(getI18nText("gui.button.filechoose.select"));
-            pathChooser.showDialog(this, null);
-            if (pathChooser.getSelectedFile().isDirectory()) {
-                path.setText(pathChooser.getSelectedFile().getPath());
+            String current = sanitizePath(pathField.getText());
+            if (!current.isEmpty()) {
+                pathChooser.setCurrentDirectory(new File(current));
+            }
+            int result = pathChooser.showDialog(this, null);
+            // 取消对话框时 getSelectedFile 为 null，直接判空即可
+            if (result == JFileChooser.APPROVE_OPTION && pathChooser.getSelectedFile() != null
+                    && pathChooser.getSelectedFile().isDirectory()) {
+                pathField.setText(pathChooser.getSelectedFile().getPath());
             }
         });
-        //路径显示预排版
-        path.setColumns(30);
-        //输出区域预排版
-        out.setRows(30);
-        out.setEditable(false);
-        //进度条预排版
-        pm.setNote("awoooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo");
-        //设置开始按钮事件
-        startButton.addActionListener((Action) ->
-        {
-            //使进度条显示
-            pm.setProgress(0);
-            //构建SwingWorker
-            new SwingWorker<LinkedList<LocalizableItem>, String>() {
-                long time;
 
-                @Override
-                protected LinkedList<LocalizableItem> doInBackground() throws IOException {
-                    //清空输出
-                    out.setText("");
-                    //起始时间
-                    time = System.nanoTime();
-                    //禁用按钮
-                    selectButton.setEnabled(false);
-                    startButton.setEnabled(false);
-                    //创建内部类以覆盖方法
-                    class Visitor extends BATFileVisitor {
-                        @Override
-                        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                            if (pm.isCanceled()) {
-                                reset();
-                                return FileVisitResult.TERMINATE;
-                            }
-                            publish(file.toString());
-                            super.visitFile(file, attrs);
-                            return FileVisitResult.CONTINUE;
-                        }
-                    }
-                    //游戏目录：...\steamapps\common\Unturned
-                    Path gamePath = Paths.get(path.getText());
-                    //判断创意工坊
-                    if (workShopCheck.isSelected() && gamePath.toFile().exists()) {
-                        //创意工坊物品目录：...\steamapps\workshop\content\304930
-                        Path workshopPath = Paths.get(gamePath.toFile().getParentFile().getParentFile().getPath(), "workshop", "content", "304930");
-                        return Visitor.visit(new Visitor(), gamePath, workshopPath);
-                    }
-                    else {
-                        return Visitor.visit(new Visitor(), gamePath);
-                    }
-                }
+        startButton.addActionListener(event -> startScan());
 
-                @Override
-                protected void process(List<String> chunks) {
-                    if (!pm.isCanceled()) {
-                        for (String path : chunks) {
-                            //防止超过100
-                            pm.setProgress(chunks.size() > 100 ? 99 : chunks.size());
-                            pm.setNote(path);
-                        }
-                    }
-                    else {
-                        reset();
-                    }
-                }
-
-                @Override
-                protected void done() {
-                    List<LocalizableItem> itemList;
-                    try {
-                        itemList = get();
-                    }
-                    catch (Exception ex) {
-                        throw new RuntimeException(ex);
-                    }
-                    if (itemList != null && !itemList.isEmpty()) {
-                        //输出生成时间和日期
-                        out.append(getI18nText("gui.result.cost") + (System.nanoTime() - time) * 10E-9 + " s\n");
-                        out.append(getI18nText("gui.result.date") + LocalDate.now() + "\n");
-                        //类型留存
-                        String lastType = "";
-                        for (LocalizableItem item : itemList) {
-                            for (Component checkBox : selectPanel.getComponents()) {
-                                //类型相符且已被选中
-                                if (item.getType().equals(((JCheckBox) checkBox).getText()) && ((JCheckBox) checkBox).isSelected()) {
-                                    if (!lastType.equals(item.getType())) {
-                                        lastType = item.getType();
-                                        out.append("\n===============" + lastType + "===============\n\n");
-                                    }
-                                    out.append(item.toString() + "\n");
-                                }
-                            }
-                        }
-                    }
-                    else {
-                        out.setText(getI18nText("result.null"));
-                    }
-
-                    reset();
-                }
-            }.execute();
+        csvButton.addActionListener(event -> {
+            if (lastResult.isEmpty()) {
+                return;
+            }
+            JFileChooser saver = new JFileChooser();
+            saver.setSelectedFile(new File("UnturnedIDs_" + LocalDate.now() + ".csv"));
+            if (saver.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+                return;
+            }
+            try {
+                Path target = saver.getSelectedFile().toPath();
+                CsvExporter.export(lastResult, target);
+                out.append(getI18nText("gui.csv.done"));
+                out.append(target.toString());
+                out.append("\n");                out.setCaretPosition(out.getDocument().getLength());
+            } catch (Exception ex) {
+                appendError(ex);
+            }
         });
-
-
     }
 
     private void addComponents() {
-        pathPanel.add(path);
+        JPanel pathPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        pathPanel.add(pathField);
         pathPanel.add(selectButton);
-        startPanel.add(workShopCheck);
+        JPanel startPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        startPanel.add(workshopCheck);
         startPanel.add(startButton);
+        startPanel.add(csvButton);
         add(new JScrollPane(out));
         add(selectPanel);
         add(pathPanel);
         add(startPanel);
+    }
+
+    /** 启动即后台检测：注册表 → libraryfolders.vdf → 游戏与工坊目录。 */
+    private void detectSteamAsync() {
+        out.setText(getI18nText("gui.detecting") + "\n");
+        pathField.setText(getI18nText("gui.detecting"));
+        new SwingWorker<SteamDetector.Locations, Void>() {
+            @Override
+            protected SteamDetector.Locations doInBackground() {
+                return SteamDetector.detect();
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    detected = get();
+                } catch (Exception ex) {
+                    detected = null;
+                }
+                if (detected != null && detected.gameDir() != null) {
+                    pathField.setText(detected.gameDir().toString());
+                    out.setText("");
+                } else {
+                    pathField.setText("");
+                    out.setText(getI18nText("gui.detect.fail") + "\n");
+                }
+            }
+        }.execute();
+    }
+
+    private void startScan() {
+        String input = sanitizePath(pathField.getText());
+        if (input.isEmpty()) {
+            out.setText(getI18nText("gui.path.empty"));
+            return;
+        }
+        Path selected = Path.of(input);
+        if (!Files.isDirectory(selected)) {
+            out.setText(getI18nText("gui.path.invalid") + "\n" + input);
+            return;
+        }
+        RootPlanner.Plan plan = RootPlanner.plan(selected, workshopCheck.isSelected(), detected);
+
+        selectButton.setEnabled(false);
+        startButton.setEnabled(false);
+        csvButton.setEnabled(false);
+        out.setText(getI18nText("gui.processing") + "\n");
+        progress = new ProgressMonitor(this, getI18nText("gui.processing.title"), "", 0, 100);
+
+        new SwingWorker<List<AssetRecord>, Void>() {
+            final long startNanos = System.nanoTime();
+
+            @Override
+            protected List<AssetRecord> doInBackground() {
+                AssetScanner scanner = new AssetScanner(plan.assetRoots(), plan.workshopRoots(), plan.vanillaGameDir());
+                return scanner.scan(new AssetScanner.Progress() {
+                    @Override
+                    public void progress(int done, int total, String currentDir) {
+                        SwingUtilities.invokeLater(() -> {
+                            if (progress == null || progress.isCanceled()) {
+                                return;
+                            }
+                            if (total > 0) {
+                                progress.setMaximum(total);
+                                progress.setProgress(done);
+                            }
+                            if (currentDir != null) {
+                                progress.setNote(currentDir);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public boolean cancelled() {
+                        return progress != null && progress.isCanceled();
+                    }
+                });
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    List<AssetRecord> records = get();
+                    if (progress != null && progress.isCanceled()) {
+                        out.setText(getI18nText("gui.cancelled"));
+                    } else {
+                        lastResult = records;
+                        render(records, (System.nanoTime() - startNanos) * 10E-9);
+                    }
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                } catch (ExecutionException ex) {
+                    appendError(ex.getCause() != null ? ex.getCause() : ex);
+                } catch (Exception ex) {
+                    appendError(ex);
+                } finally {
+                    if (progress != null) {
+                        progress.close();
+                        progress = null;
+                    }
+                    selectButton.setEnabled(true);
+                    startButton.setEnabled(true);
+                    csvButton.setEnabled(!lastResult.isEmpty());
+                }
+            }
+        }.execute();
+    }
+
+    private void render(List<AssetRecord> records, double seconds) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(getI18nText("gui.result.cost"))
+                .append(String.format(Locale.ROOT, "%.2f", seconds)).append(" s\n");
+        sb.append(getI18nText("gui.result.date")).append(LocalDate.now()).append("\n");
+
+        Map<AssetCategory, List<AssetRecord>> groups = new EnumMap<>(AssetCategory.class);
+        for (AssetRecord record : records) {
+            groups.computeIfAbsent(record.getCategory(), key -> new java.util.ArrayList<>()).add(record);
+        }
+        for (AssetCategory category : AssetCategory.values()) {
+            JCheckBox box = categoryBoxes.get(category);
+            if (box != null && !box.isSelected()) {
+                continue;
+            }
+            List<AssetRecord> group = groups.get(category);
+            if (group == null || group.isEmpty()) {
+                continue;
+            }
+            sb.append("\n===============").append(category.getName()).append("===============\n\n");
+            for (AssetRecord record : group) {
+                sb.append(record).append('\n');
+            }
+        }
+        out.setText(sb.toString());
+        out.setCaretPosition(0);
+    }
+
+    private void appendError(Throwable throwable) {
+        out.append(getI18nText("gui.error") + "\n");
+        throwable.printStackTrace(new PrintWriter(
+                new OutputStreamWriter(new JTextAreaWithInputStream(out), StandardCharsets.UTF_8), true));
+    }
+
+    /** 手动输入容错：去首尾空白与包裹引号，去掉多余的尾部反斜杠。 */
+    private static String sanitizePath(String input) {
+        String text = input.strip();
+        if (text.length() >= 2
+                && ((text.startsWith("\"") && text.endsWith("\""))
+                || (text.startsWith("'") && text.endsWith("'")))) {
+            text = text.substring(1, text.length() - 1).strip();
+        }
+        while (text.endsWith("\\") && text.length() > 3) {
+            text = text.substring(0, text.length() - 1);
+        }
+        return text;
     }
 }
