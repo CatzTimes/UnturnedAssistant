@@ -26,6 +26,10 @@ public final class AssetRecord {
     private final String targetGuid;
     private final AssetCategory targetCategory;
     private final boolean bypassIdLimit;
+    /** 构造时即判定的"是否重定向资产"，与后续类别覆盖无关。 */
+    private final boolean redirector;
+    /** 已解析的重定向目标名；null = 非重定向或目标未解析。 */
+    private String redirectTarget;
     private final List<String> notes = new ArrayList<>();
 
     public AssetRecord(AssetCategory category, String rawType, int id, boolean idValid, String rawId,
@@ -46,6 +50,7 @@ public final class AssetRecord {
         this.targetGuid = targetGuid == null ? "" : targetGuid;
         this.targetCategory = targetCategory;
         this.bypassIdLimit = bypassIdLimit;
+        this.redirector = category == AssetCategory.REDIRECTOR;
     }
 
     public AssetCategory getCategory() {
@@ -106,6 +111,15 @@ public final class AssetRecord {
         this.category = category;
     }
 
+    public boolean isRedirector() {
+        return redirector;
+    }
+
+    /** 已解析的重定向目标名；设置后展示为 "内部名 → 目标名"。 */
+    public void setRedirectTarget(String targetName) {
+        this.redirectTarget = targetName;
+    }
+
     public boolean isBypassIdLimit() {
         return bypassIdLimit;
     }
@@ -154,12 +168,21 @@ public final class AssetRecord {
     /**
      * 单行展示：ID 名称 [Type] (来源) [GUID] 备注。
      * includeOrigin=false 时省略来源；有短 ID 时 GUID 冗余省略（仅无 ID 资产展示）。
+     * 重定向行展示为 "内部名 → 目标名"，不显示长类型名与无本地化备注。
      */
     public String toDisplayString(boolean includeOrigin) {
         StringBuilder sb = new StringBuilder();
-        sb.append(id > 0 ? id : "?").append("  ").append(displayName());
-        if (!rawType.isEmpty()) {
-            sb.append("  [").append(rawType).append(']');
+        sb.append(id > 0 ? id : "?").append("  ");
+        if (redirector) {
+            sb.append(internalName);
+            if (redirectTarget != null) {
+                sb.append(" → ").append(redirectTarget);
+            }
+        } else {
+            sb.append(displayName());
+            if (!rawType.isEmpty()) {
+                sb.append("  [").append(rawType).append(']');
+            }
         }
         if (includeOrigin) {
             sb.append("  (").append(origin).append(')');

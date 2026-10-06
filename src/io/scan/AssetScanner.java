@@ -430,16 +430,21 @@ public final class AssetScanner {
                     record.addNote(getI18nText("gui.note.guidconflict"));
                 }
             }
-            // 重定向：解析目标名，并归入目标类别分区（游戏内 /v <旧ID> 即命中目标）
-            if (record.getCategory() == AssetCategory.REDIRECTOR && !record.getTargetGuid().isEmpty()) {
+            // 重定向：解析目标名并归入目标类别分区（游戏内 /v <旧ID> 即命中目标）；
+            // 解析成功时展示为 "内部名 → 目标名"，不追加备注
+            if (record.isRedirector() && !record.getTargetGuid().isEmpty()) {
                 String target = guidToName.get(record.getTargetGuid().toLowerCase(Locale.ROOT));
-                record.addNote(getI18nText("gui.note.redirect") + (target != null ? target : record.getTargetGuid()));
+                if (target != null) {
+                    record.setRedirectTarget(target);
+                } else {
+                    record.addNote(getI18nText("gui.note.redirect") + record.getTargetGuid());
+                }
                 AssetCategory targetCategory = record.getTargetCategory();
                 if (targetCategory != null && targetCategory != AssetCategory.REDIRECTOR) {
                     record.overrideCategory(targetCategory);
                 }
             }
-            if (!record.hasLocalizedName()) {
+            if (!record.hasLocalizedName() && !record.isRedirector()) {
                 record.addNote(getI18nText("gui.note.nolocal"));
             }
         }
