@@ -8,3 +8,4 @@ tools/
 *.log
 .mimosa/
 outclasses/
+.idea/
