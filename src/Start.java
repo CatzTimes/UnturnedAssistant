@@ -47,8 +47,9 @@ public class Start {
             counts.merge(record.getCategory(), 1, Integer::sum);
         }
         System.err.println("[分类统计] " + counts);
+        boolean showOrigin = AssetScanner.originsDiffer(records);
         for (AssetRecord record : records) {
-            System.out.println(record);
+            System.out.println(record.toDisplayString(showOrigin));
         }
     }
 }

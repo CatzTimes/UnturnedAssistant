@@ -275,6 +275,7 @@ public class Displayer extends JFrame {
         for (AssetRecord record : records) {
             groups.computeIfAbsent(record.getCategory(), key -> new java.util.ArrayList<>()).add(record);
         }
+        boolean showOrigin = AssetScanner.originsDiffer(records);
         for (AssetCategory category : AssetCategory.values()) {
             JCheckBox box = categoryBoxes.get(category);
             if (box != null && !box.isSelected()) {
@@ -286,7 +287,7 @@ public class Displayer extends JFrame {
             }
             sb.append("\n===============").append(category.getName()).append("===============\n\n");
             for (AssetRecord record : group) {
-                sb.append(record).append('\n');
+                sb.append(record.toDisplayString(showOrigin)).append('\n');
             }
         }
         out.setText(sb.toString());

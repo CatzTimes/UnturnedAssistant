@@ -17,7 +17,7 @@ gui.path.empty=请先选择或输入游戏/模组目录。
 gui.path.invalid=目录不存在，请检查路径是否正确：
 gui.csv.done=已导出 CSV：
 
-origin.vanilla=官方本体
+origin.vanilla=游戏本体
 origin.workshop=工坊
 
 gui.note.conflict=⚠ID冲突(生效来源:

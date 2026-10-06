@@ -258,6 +258,10 @@ public final class AssetScanner {
         boolean bypass = data.has("Bypass_ID_Limit") || body.has("Bypass_ID_Limit");
 
         int[] id = parseId(rawId);
+        // 无 legacy ID 的资产（皮肤基底等 GUID-only 物品）无法按 ID 查找，不属于 ID 表范畴
+        if (id[0] == 0) {
+            return null;
+        }
         String[] origin = originOf(dir);
         return new AssetRecord(
                 TypeRegistry.resolve(typeStr),
@@ -414,6 +418,20 @@ public final class AssetScanner {
             case "workshop" -> 1;
             default -> 2;
         };
+    }
+
+    /** 全部条目来源相同时（如只扫游戏本体），来源列无信息量，可不显示。 */
+    public static boolean originsDiffer(List<AssetRecord> records) {
+        if (records.isEmpty()) {
+            return false;
+        }
+        String first = records.get(0).getOrigin();
+        for (AssetRecord record : records) {
+            if (!record.getOrigin().equals(first)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 官方保留的 legacy ID 上限（对齐 AssetIdListExporter 的 Reserved for Vanilla 区间）。 */

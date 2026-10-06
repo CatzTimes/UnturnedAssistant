@@ -135,13 +135,23 @@ public final class AssetRecord {
 
     @Override
     public String toString() {
+        return toDisplayString(true);
+    }
+
+    /**
+     * 单行展示：ID 名称 [Type] (来源) [GUID] 备注。
+     * includeOrigin=false 时省略来源；有短 ID 时 GUID 冗余省略（仅无 ID 资产展示）。
+     */
+    public String toDisplayString(boolean includeOrigin) {
         StringBuilder sb = new StringBuilder();
         sb.append(id > 0 ? id : "?").append("  ").append(displayName());
         if (!rawType.isEmpty()) {
             sb.append("  [").append(rawType).append(']');
         }
-        sb.append("  (").append(origin).append(')');
-        if (!guid.isEmpty()) {
+        if (includeOrigin) {
+            sb.append("  (").append(origin).append(')');
+        }
+        if (id <= 0 && !guid.isEmpty()) {
             sb.append("  GUID:").append(guid);
         }
         for (String note : notes) {
