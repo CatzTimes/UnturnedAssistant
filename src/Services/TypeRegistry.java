@@ -1,11 +1,13 @@
-package io.scan;
+package Services;
+
+import Models.AssetCategory;
 
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
 /**
- * Type 字符串 → 资产大类。
+ * Type 字符串 → 资产大类解析服务。
  * 清单对齐官方源码 UnturnedNexus.assetTypes 注册表与 EItemType 枚举（50 个物品子类）。
  */
 public final class TypeRegistry {

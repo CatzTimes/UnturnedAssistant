@@ -1,4 +1,4 @@
-package io.scan;
+package Models;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -181,7 +181,7 @@ public final class AssetRecord {
 
     /**
      * 单行展示：ID 名称 [Type] (来源) [GUID] 备注。
-     * includeOrigin=false 时省略来源；有短 ID 时 GUID 冗余省略（仅无 ID 资产展示）；
+     * includeOrigin=false 时省略来源；有短 ID 时 GUID 冗余省略（仅无 ID 与物体类展示）；
      * 类型名与所属分区同名时省略（如载具区的 [Vehicle]）；
      * 重定向行展示为 "内部名 → 目标名"，不显示长类型名与无本地化备注。
      */
@@ -215,7 +215,7 @@ public final class AssetRecord {
         return sb.toString();
     }
 
-    String sortKey() {
+    public String sortKey() {
         return internalName.toLowerCase(Locale.ROOT);
     }
 }

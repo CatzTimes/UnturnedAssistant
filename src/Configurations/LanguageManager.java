@@ -1,4 +1,4 @@
-package Language;
+package Configurations;
 
 import java.io.BufferedReader;
 import java.io.IOException;

@@ -1,6 +1,6 @@
-package io.scan;
+package Models;
 
-import Language.LanguageManager;
+import Configurations.LanguageManager;
 
 /**
  * 资产大类（输出分组顺序即枚举声明顺序）。

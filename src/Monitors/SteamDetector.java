@@ -1,4 +1,7 @@
-package io.detect;
+package Monitors;
+
+import Configurations.AppConfig;
+import Models.SteamLocations;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -16,30 +19,23 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Steam/Unturned 目录自动检测：
+ * Steam/Unturned 环境探测：
  *   注册表 SteamPath(HKCU) / InstallPath(HKLM) → steamapps/libraryfolders.vdf 全部库
  *   → 游戏 steamapps/common/Unturned（以 Bundles 或 Unturned.exe 校验）
- *   → 各库 steamapps/workshop/content/304930（游戏所在库优先）。
+ *   → 各库 steamapps/workshop/content/{AppID}（游戏所在库优先）。
  * 不硬编码盘符：Steam 装在任何位置都能命中。
  */
 public final class SteamDetector {
 
-    public record Locations(Path gameDir, List<Path> workshopRoots) {
-        public Locations {
-            workshopRoots = List.copyOf(workshopRoots);
-        }
-    }
-
     private static final Pattern VDF_PATH_LINE = Pattern.compile("^\\s*\"path\"\\s+\"(.+)\"\\s*$");
-    private static final int WORKSHOP_APP_ID = 304930;
 
     private SteamDetector() {
     }
 
-    public static Locations detect() {
+    public static SteamLocations detect() {
         Path steamRoot = findSteamRoot();
         if (steamRoot == null) {
-            return new Locations(null, List.of());
+            return new SteamLocations(null, List.of());
         }
         List<Path> libraries = findLibraries(steamRoot);
 
@@ -62,7 +58,7 @@ public final class SteamDetector {
         for (Path library : libraries) {
             addWorkshopRoot(library, workshopRoots);
         }
-        return new Locations(gameDir, workshopRoots);
+        return new SteamLocations(gameDir, workshopRoots);
     }
 
     public static boolean isGameDir(Path path) {
@@ -72,7 +68,7 @@ public final class SteamDetector {
 
     private static void addWorkshopRoot(Path library, List<Path> out) {
         Path root = library.resolve("steamapps").resolve("workshop")
-                .resolve("content").resolve(String.valueOf(WORKSHOP_APP_ID));
+                .resolve("content").resolve(String.valueOf(AppConfig.WORKSHOP_APP_ID));
         if (Files.isDirectory(root) && out.stream().noneMatch(existing -> samePath(existing, root))) {
             out.add(root);
         }
@@ -116,7 +112,7 @@ public final class SteamDetector {
         return null;
     }
 
-    /** 读取注册表值；失败返回 null（不抛异常，检测失败时 GUI 会提示手动选择）。 */
+    /** 读取注册表值；失败返回 null（不抛异常，探测失败时 GUI 会提示手动选择）。 */
     private static String regQuery(String key, String valueName) {
         try {
             Process process = new ProcessBuilder("reg", "query", key, "/v", valueName)

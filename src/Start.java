@@ -1,9 +1,12 @@
-import gui.Displayer;
-import io.detect.SteamDetector;
-import io.scan.AssetCategory;
-import io.scan.AssetRecord;
-import io.scan.AssetScanner;
-import io.scan.RootPlanner;
+import Gui.Displayer;
+import Models.AssetCategory;
+import Models.AssetRecord;
+import Models.ScanPlan;
+import Models.SteamLocations;
+import Monitors.ScanProgress;
+import Monitors.SteamDetector;
+import Services.AssetScanner;
+import Services.RootPlanner;
 
 import java.nio.file.Path;
 import java.util.EnumMap;
@@ -25,13 +28,13 @@ public class Start {
         Path root = Path.of(args[1]);
         boolean workshop = args.length > 2 && args[2].equalsIgnoreCase("workshop");
 
-        SteamDetector.Locations detected = workshop ? SteamDetector.detect() : null;
-        RootPlanner.Plan plan = RootPlanner.plan(root, workshop, detected);
+        SteamLocations detected = workshop ? SteamDetector.detect() : null;
+        ScanPlan plan = RootPlanner.plan(root, workshop, detected);
         System.err.println("[根目录] " + plan.assetRoots());
         System.err.println("[工坊根] " + plan.workshopRoots());
 
         List<AssetRecord> records = new AssetScanner(plan.assetRoots(), plan.workshopRoots(), plan.vanillaGameDir())
-                .scan(new AssetScanner.Progress() {
+                .scan(new ScanProgress() {
                     @Override
                     public void progress(int done, int total, String currentDir) {
                     }

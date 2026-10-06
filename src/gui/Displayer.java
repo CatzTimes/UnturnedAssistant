@@ -1,11 +1,14 @@
-package gui;
+package Gui;
 
-import io.csv.CsvExporter;
-import io.detect.SteamDetector;
-import io.scan.AssetCategory;
-import io.scan.AssetRecord;
-import io.scan.AssetScanner;
-import io.scan.RootPlanner;
+import Configurations.AppConfig;
+import Models.AssetCategory;
+import Models.AssetRecord;
+import Models.SteamLocations;
+import Monitors.ScanProgress;
+import Monitors.SteamDetector;
+import Services.AssetScanner;
+import Services.CsvExporter;
+import Services.RootPlanner;
 
 import javax.imageio.ImageIO;
 import javax.swing.JButton;
@@ -38,7 +41,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
-import static Language.LanguageManager.getI18nText;
+import static Configurations.LanguageManager.getI18nText;
 import static javax.swing.JFileChooser.DIRECTORIES_ONLY;
 
 /**
@@ -48,7 +51,7 @@ import static javax.swing.JFileChooser.DIRECTORIES_ONLY;
  */
 public class Displayer extends JFrame {
 
-    private static final String VERSION = "V4.0";
+    private static final String VERSION = AppConfig.VERSION_LABEL;
 
     private final JTextField pathField = new JTextField(34);
     private final JTextArea out = new JTextArea();
@@ -60,7 +63,7 @@ public class Displayer extends JFrame {
     private final JButton csvButton = new JButton(getI18nText("gui.button.csv"));
     private final JFileChooser pathChooser = new JFileChooser();
 
-    private volatile SteamDetector.Locations detected;
+    private volatile SteamLocations detected;
     private ProgressMonitor progress;
     private List<AssetRecord> lastResult = List.of();
 
@@ -148,7 +151,8 @@ public class Displayer extends JFrame {
                 CsvExporter.export(lastResult, target);
                 out.append(getI18nText("gui.csv.done"));
                 out.append(target.toString());
-                out.append("\n");                out.setCaretPosition(out.getDocument().getLength());
+                out.append("\n");
+                out.setCaretPosition(out.getDocument().getLength());
             } catch (Exception ex) {
                 appendError(ex);
             }
@@ -169,13 +173,13 @@ public class Displayer extends JFrame {
         add(startPanel);
     }
 
-    /** 启动即后台检测：注册表 → libraryfolders.vdf → 游戏与工坊目录。 */
+    /** 启动即后台探测：注册表 → libraryfolders.vdf → 游戏与工坊目录。 */
     private void detectSteamAsync() {
         out.setText(getI18nText("gui.detecting") + "\n");
         pathField.setText(getI18nText("gui.detecting"));
-        new SwingWorker<SteamDetector.Locations, Void>() {
+        new SwingWorker<SteamLocations, Void>() {
             @Override
-            protected SteamDetector.Locations doInBackground() {
+            protected SteamLocations doInBackground() {
                 return SteamDetector.detect();
             }
 
@@ -208,7 +212,7 @@ public class Displayer extends JFrame {
             out.setText(getI18nText("gui.path.invalid") + "\n" + input);
             return;
         }
-        RootPlanner.Plan plan = RootPlanner.plan(selected, workshopCheck.isSelected(), detected);
+        Models.ScanPlan plan = RootPlanner.plan(selected, workshopCheck.isSelected(), detected);
 
         selectButton.setEnabled(false);
         startButton.setEnabled(false);
@@ -222,7 +226,7 @@ public class Displayer extends JFrame {
             @Override
             protected List<AssetRecord> doInBackground() {
                 AssetScanner scanner = new AssetScanner(plan.assetRoots(), plan.workshopRoots(), plan.vanillaGameDir());
-                return scanner.scan(new AssetScanner.Progress() {
+                return scanner.scan(new ScanProgress() {
                     @Override
                     public void progress(int done, int total, String currentDir) {
                         SwingUtilities.invokeLater(() -> {

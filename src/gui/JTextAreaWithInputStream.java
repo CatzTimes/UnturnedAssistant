@@ -1,4 +1,4 @@
-package gui;
+package Gui;
 
 import javax.swing.JTextArea;
 import java.io.OutputStream;

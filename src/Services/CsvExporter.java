@@ -1,6 +1,6 @@
-package io.csv;
+package Services;
 
-import io.scan.AssetRecord;
+import Models.AssetRecord;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -10,8 +10,9 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * CSV 导出：列序对齐官方 AssetIdListExporter（Name,GUID,Type,Origin,Legacy ID,Legacy Category），
- * 另附资产路径与备注；UTF-8 带 BOM 以便 Excel 直接打开中文不乱码。
+ * CSV 导出服务：列序对齐官方 AssetIdListExporter
+ * （Name,GUID,Type,Origin,Legacy ID,Legacy Category），另附资产路径与备注；
+ * UTF-8 带 BOM 以便 Excel 直接打开中文不乱码。
  */
 public final class CsvExporter {
 

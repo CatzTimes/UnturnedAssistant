@@ -1,4 +1,4 @@
-package io.dat;
+package Models;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,7 +13,7 @@ public final class DatNode {
 
     private final Map<String, Object> entries = new LinkedHashMap<>();
 
-    void put(String key, Object value) {
+    public void put(String key, Object value) {
         entries.put(key.toLowerCase(Locale.ROOT), value);
     }
 

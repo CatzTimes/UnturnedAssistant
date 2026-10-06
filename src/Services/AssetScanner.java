@@ -1,7 +1,12 @@
-package io.scan;
+package Services;
 
-import io.dat.DatNode;
-import io.dat.DatParser;
+import Configurations.AppConfig;
+import Models.AssetCategory;
+import Models.AssetRecord;
+import Models.DatNode;
+import Monitors.ScanProgress;
+
+import static Configurations.LanguageManager.getI18nText;
 
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
@@ -19,28 +24,19 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ConcurrentHashMap;
-
-import static Language.LanguageManager.getI18nText;
 
 /**
- * 资产扫描器：目录驱动的发现规则与游戏运行时（AssetsWorker.FindAssets）一致：
+ * 资产扫描服务：目录驱动的发现规则与游戏运行时（AssetsWorker.FindAssets）一致：
  *   &lt;目录名&gt;.asset → &lt;目录名&gt;.dat → Asset.dat → 目录内所有 *.asset；
  * 同目录的其余 .dat 作为语言文件（English 优先兜底）。
  * 解析阶段按目录粒度并行；冲突/保留区间标注在扫描完成后统一进行。
  */
 public final class AssetScanner {
-
-    /** progress/done 由后台线程调用；cancelled 供其轮询。 */
-    public interface Progress {
-        void progress(int done, int total, String currentDir);
-
-        boolean cancelled();
-    }
 
     private final List<Path> assetRoots;
     private final List<Path> workshopRoots;
@@ -54,7 +50,7 @@ public final class AssetScanner {
         this.vanillaGameDir = vanillaGameDir;
     }
 
-    public List<AssetRecord> scan(Progress progress) {
+    public List<AssetRecord> scan(ScanProgress progress) {
         guidToName.clear();
         List<Path> dirs = new ArrayList<>();
         for (Path root : assetRoots) {
@@ -72,7 +68,8 @@ public final class AssetScanner {
         }
 
         List<AssetRecord> records = new ArrayList<>();
-        int threads = Math.min(Math.max(Runtime.getRuntime().availableProcessors(), 2), 8);
+        int threads = Math.min(Math.max(Runtime.getRuntime().availableProcessors(),
+                AppConfig.SCANNER_MIN_THREADS), AppConfig.SCANNER_MAX_THREADS);
         ExecutorService pool = Executors.newFixedThreadPool(threads, task -> {
             Thread thread = new Thread(task, "asset-scanner");
             thread.setDaemon(true);
@@ -109,7 +106,7 @@ public final class AssetScanner {
         return records;
     }
 
-    private static void collectDirs(Path root, List<Path> dirs, Progress progress) {
+    private static void collectDirs(Path root, List<Path> dirs, ScanProgress progress) {
         try {
             Files.walkFileTree(root, new SimpleFileVisitor<>() {
                 @Override
@@ -138,10 +135,10 @@ public final class AssetScanner {
         }
     }
 
-    /** dir 是否为工坊 content/304930 下的直接子包，且类型为地图/UI 本地化（应剪枝）。 */
+    /** dir 是否为工坊 content/{AppID} 下的直接子包，且类型为地图/UI 本地化（应剪枝）。 */
     private static boolean isSkippableWorkshopPackage(Path dir) {
         Path parent = dir.getParent();
-        if (parent == null || !"304930".equalsIgnoreCase(parent.getFileName().toString())) {
+        if (parent == null || !String.valueOf(AppConfig.WORKSHOP_APP_ID).equals(parent.getFileName().toString())) {
             return false;
         }
         Path content = parent.getParent();
@@ -344,7 +341,7 @@ public final class AssetScanner {
         return dot > 0 ? fileName.substring(0, dot) : fileName;
     }
 
-    /** [kind, 显示名]：官方本体 / 工坊 FileID / 自定义目录的顶层文件夹。 */
+    /** [kind, 显示名]：游戏本体 / 工坊 FileID / 自定义目录的顶层文件夹。 */
     private String[] originOf(Path dir) {
         if (vanillaGameDir != null && startsWith(dir, vanillaGameDir)) {
             return new String[]{"vanilla", getI18nText("origin.vanilla")};
@@ -373,7 +370,7 @@ public final class AssetScanner {
 
     private static boolean isWorkshopContentRoot(Path root) {
         Path normalized = root.toAbsolutePath().normalize();
-        if (!"304930".equalsIgnoreCase(normalized.getFileName().toString())) {
+        if (!String.valueOf(AppConfig.WORKSHOP_APP_ID).equalsIgnoreCase(normalized.getFileName().toString())) {
             return false;
         }
         Path content = normalized.getParent();
@@ -384,6 +381,20 @@ public final class AssetScanner {
 
     private static boolean startsWith(Path child, Path parent) {
         return child.toAbsolutePath().normalize().startsWith(parent.toAbsolutePath().normalize());
+    }
+
+    /** 全部条目来源相同时（如只扫游戏本体），来源列无信息量，可不显示。 */
+    public static boolean originsDiffer(List<AssetRecord> records) {
+        if (records.isEmpty()) {
+            return false;
+        }
+        String first = records.get(0).getOrigin();
+        for (AssetRecord record : records) {
+            if (!record.getOrigin().equals(first)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 扫描后统一标注：ID/GUID 冲突（官方优先→工坊先到先得）、官方保留区间、重定向归入目标类别、非法 ID。 */
@@ -417,7 +428,7 @@ public final class AssetScanner {
                     }
                 }
                 if (!"vanilla".equals(record.getOriginKind())) {
-                    int limit = reservedLimit(record.getCategory());
+                    int limit = AppConfig.reservedLegacyIdLimit(record.getCategory());
                     if (limit > 0 && record.getId() < limit) {
                         record.addNote(record.isBypassIdLimit()
                                 ? getI18nText("gui.note.reserved") + "(Bypass_ID_Limit)"
@@ -463,35 +474,6 @@ public final class AssetScanner {
             case "vanilla" -> 0;
             case "workshop" -> 1;
             default -> 2;
-        };
-    }
-
-    /** 全部条目来源相同时（如只扫游戏本体），来源列无信息量，可不显示。 */
-    public static boolean originsDiffer(List<AssetRecord> records) {
-        if (records.isEmpty()) {
-            return false;
-        }
-        String first = records.get(0).getOrigin();
-        for (AssetRecord record : records) {
-            if (!record.getOrigin().equals(first)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** 官方保留的 legacy ID 上限（对齐 AssetIdListExporter 的 Reserved for Vanilla 区间）。 */
-    private static int reservedLimit(AssetCategory category) {
-        return switch (category) {
-            case ITEM -> 2000;
-            case EFFECT -> 200;
-            case RESOURCE, ANIMAL -> 50;
-            case MYTHIC -> 500;
-            case SKIN -> 2000;
-            case DIALOGUE, QUEST, VENDOR -> 2000;
-            case SPAWN -> 1000;
-            case VEHICLE -> 2000;
-            default -> 0;
         };
     }
 }

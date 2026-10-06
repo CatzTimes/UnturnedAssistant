@@ -43,6 +43,36 @@ java -cp classes Start --scan "<游戏或模组目录>" [workshop]
 | `dist/UnturnedAssistant-4.0.exe` | 单文件绿色版（7zSD SFX 封装，双击即用，退出后临时文件自清理） |
 | `dist/UnturnedAssistant/UnturnedAssistant.exe` | app-image 文件夹版（含自带运行时） |
 
+## 架构（模块化）
+
+```
+src/
+├── Start.java                 入口（GUI 启动 + --scan 无界面模式）
+├── Models/                    纯数据模型
+│   ├── AssetCategory          资产大类枚举
+│   ├── AssetRecord            资产记录（ID/GUID/名称/来源/备注）
+│   ├── DatNode                .dat 解析树节点
+│   ├── SteamLocations         Steam 探测结果
+│   └── ScanPlan               扫描规划结果
+├── Services/                  业务服务
+│   ├── DatParser              .dat/.asset v1/v2 解析
+│   ├── TypeRegistry           Type→类别解析（对齐 UnturnedNexus）
+│   ├── AssetScanner           并行扫描引擎（发现/过滤/冲突标注）
+│   ├── RootPlanner            扫描根规划（游戏目录/工坊/自定义）
+│   └── CsvExporter            CSV 导出（对齐官方 AssetIdListExporter 列序）
+├── Monitors/                  探测与监控契约
+│   ├── SteamDetector          Steam 环境探测（注册表 + libraryfolders.vdf）
+│   └── ScanProgress           扫描进度监控接口
+├── Configurations/            配置
+│   ├── LanguageManager        i18n 文案加载（zh_CN/en_US）
+│   └── AppConfig              版本/AppID/线程数/官方保留 ID 区间
+└── Gui/                       展示层
+    ├── Displayer              Swing 主界面
+    └── JTextAreaWithInputStream
+```
+
+依赖方向：`Gui → Services/Monitors/Models/Configurations`，`Services → Models/Monitors/Configurations`，`Monitors → Models/Configurations`；`Models` 不依赖任何其他模块。
+
 ## V4.0 相对 V3.9 的主要变化
 
 - 重写解析器：v1/v2 兼容（旧版只能按空格切分，遇到引号/注释/子字典即错解），UTF-8 BOM 剥离（修复中文模组 `#未找到#`）。

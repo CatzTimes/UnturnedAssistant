@@ -1,4 +1,6 @@
-package io.dat;
+package Services;
+
+import Models.DatNode;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -10,7 +12,7 @@ import java.util.Deque;
 import java.util.List;
 
 /**
- * Unturned .dat(v1) / .asset(v2) 兼容解析器。
+ * Unturned .dat(v1) / .asset(v2) 兼容解析服务。
  * 语法要点（官方 assets/data-file-format 文档）：
  *  - 每行 "键 值"，键不区分大小写；键与值都可用引号包裹；
  *  - '{' 开子字典、'[' 开列表，可另起一行（键单独成行）或直接跟在键后；
