@@ -60,6 +60,31 @@ public final class TypeRegistry {
         if (rawType == null || rawType.isBlank()) {
             return AssetCategory.OTHER;
         }
-        return TYPES.getOrDefault(rawType.strip().toLowerCase(Locale.ROOT), AssetCategory.OTHER);
+        String normalized = rawType.strip().toLowerCase(Locale.ROOT);
+        // 重定向资产：官方 "Redirector" 与完全限定类名（如 SDG.Unturned.VehicleRedirectorAsset）
+        if (normalized.contains("redirector")) {
+            return AssetCategory.REDIRECTOR;
+        }
+        return TYPES.getOrDefault(normalized, AssetCategory.OTHER);
+    }
+
+    /** 通用 Redirector 资产声明的目标类别（AssetCategory 字段）→ 本工具类别。 */
+    public static AssetCategory parseDeclaredCategory(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        return switch (raw.strip().toLowerCase(Locale.ROOT)) {
+            case "item" -> AssetCategory.ITEM;
+            case "vehicle" -> AssetCategory.VEHICLE;
+            case "object" -> AssetCategory.OBJECT;
+            case "effect" -> AssetCategory.EFFECT;
+            case "resource" -> AssetCategory.RESOURCE;
+            case "animal" -> AssetCategory.ANIMAL;
+            case "mythic" -> AssetCategory.MYTHIC;
+            case "skin" -> AssetCategory.SKIN;
+            case "spawn" -> AssetCategory.SPAWN;
+            case "npc" -> AssetCategory.NPC;
+            default -> null;
+        };
     }
 }

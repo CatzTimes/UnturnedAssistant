@@ -23,6 +23,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static Language.LanguageManager.getI18nText;
 
@@ -44,6 +45,8 @@ public final class AssetScanner {
     private final List<Path> assetRoots;
     private final List<Path> workshopRoots;
     private final Path vanillaGameDir;
+    /** guid(小写) → 显示名；收录全部解析到的资产（含被排除的），供重定向解析目标名。 */
+    private final Map<String, String> guidToName = new ConcurrentHashMap<>();
 
     public AssetScanner(List<Path> assetRoots, List<Path> workshopRoots, Path vanillaGameDir) {
         this.assetRoots = List.copyOf(assetRoots);
@@ -52,6 +55,7 @@ public final class AssetScanner {
     }
 
     public List<AssetRecord> scan(Progress progress) {
+        guidToName.clear();
         List<Path> dirs = new ArrayList<>();
         for (Path root : assetRoots) {
             if (Files.isDirectory(root)) {
@@ -255,10 +259,22 @@ public final class AssetScanner {
         if (targetGuid == null && metadata != null) {
             targetGuid = metadata.getString("TargetAsset");
         }
+        // 载具重定向（VehicleRedirectorAsset）用 TargetVehicle 指向目标载具
+        if (targetGuid == null) {
+            targetGuid = data.getString("TargetVehicle");
+        }
         boolean bypass = data.has("Bypass_ID_Limit") || body.has("Bypass_ID_Limit");
         boolean pro = data.has("Pro") || body.has("Pro");
 
         AssetCategory category = TypeRegistry.resolve(typeStr);
+        String internalName = internalNameOf(dir, assetFile);
+
+        // 先收录 GUID→名称（含将被排除的资产），重定向目标可能本身没有 ID
+        if (guid != null && !guid.isEmpty()) {
+            guidToName.putIfAbsent(guid.toLowerCase(Locale.ROOT),
+                    AssetRecord.joinNames(localization, internalName));
+        }
+
         // Pro 标记 = 官方 Steam 经济（皮肤基底）物品，玩家视角不是可用物品
         if (pro && category == AssetCategory.ITEM) {
             return null;
@@ -269,14 +285,31 @@ public final class AssetScanner {
         if (id[0] == 0) {
             return null;
         }
+
+        // 重定向目标类别：载具重定向恒为载具；通用 Redirector 读 AssetCategory 声明
+        AssetCategory targetCategory = null;
+        if (category == AssetCategory.REDIRECTOR) {
+            if (typeStr != null && typeStr.toLowerCase(Locale.ROOT).contains("vehicleredirector")) {
+                targetCategory = AssetCategory.VEHICLE;
+            } else {
+                targetCategory = TypeRegistry.parseDeclaredCategory(data.getString("AssetCategory"));
+            }
+        }
+
         String[] origin = originOf(dir);
+        // 完全限定类名（如 "...VehicleRedirectorAsset, Assembly-CSharp, ..."）截掉程序集后缀便于展示
+        String displayType = typeStr == null ? "" : typeStr.strip();
+        int assembly = displayType.indexOf(',');
+        if (assembly > 0) {
+            displayType = displayType.substring(0, assembly);
+        }
         return new AssetRecord(
                 category,
-                typeStr == null ? "" : typeStr.strip(),
+                displayType,
                 id[0], id[1] == 1, rawId == null ? "" : rawId.strip(),
-                guid, internalNameOf(dir, assetFile),
+                guid, internalName,
                 localization, origin[1], origin[0], assetFile,
-                targetGuid, bypass);
+                targetGuid, targetCategory, bypass);
     }
 
     /** [值, 是否有效]：容错解析（trim、ushort 范围），与游戏 ParseUInt16 语义对齐但保留非法痕迹。 */
@@ -353,15 +386,8 @@ public final class AssetScanner {
         return child.toAbsolutePath().normalize().startsWith(parent.toAbsolutePath().normalize());
     }
 
-    /** 扫描后统一标注：ID/GUID 冲突（官方优先→工坊先到先得）、官方保留区间、重定向目标、非法 ID。 */
-    private static void postProcess(List<AssetRecord> records) {
-        Map<String, String> nameByGuid = new HashMap<>();
-        for (AssetRecord record : records) {
-            if (!record.getGuid().isEmpty()) {
-                nameByGuid.putIfAbsent(record.getGuid().toLowerCase(Locale.ROOT), record.displayName());
-            }
-        }
-
+    /** 扫描后统一标注：ID/GUID 冲突（官方优先→工坊先到先得）、官方保留区间、重定向归入目标类别、非法 ID。 */
+    private void postProcess(List<AssetRecord> records) {
         Map<String, AssetRecord> activeById = new HashMap<>();
         Map<String, AssetRecord> activeByGuid = new HashMap<>();
         for (AssetRecord record : records) {
@@ -404,9 +430,14 @@ public final class AssetScanner {
                     record.addNote(getI18nText("gui.note.guidconflict"));
                 }
             }
+            // 重定向：解析目标名，并归入目标类别分区（游戏内 /v <旧ID> 即命中目标）
             if (record.getCategory() == AssetCategory.REDIRECTOR && !record.getTargetGuid().isEmpty()) {
-                String target = nameByGuid.get(record.getTargetGuid().toLowerCase(Locale.ROOT));
+                String target = guidToName.get(record.getTargetGuid().toLowerCase(Locale.ROOT));
                 record.addNote(getI18nText("gui.note.redirect") + (target != null ? target : record.getTargetGuid()));
+                AssetCategory targetCategory = record.getTargetCategory();
+                if (targetCategory != null && targetCategory != AssetCategory.REDIRECTOR) {
+                    record.overrideCategory(targetCategory);
+                }
             }
             if (!record.hasLocalizedName()) {
                 record.addNote(getI18nText("gui.note.nolocal"));

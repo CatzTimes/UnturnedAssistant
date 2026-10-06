@@ -12,7 +12,7 @@ import java.util.Map;
  */
 public final class AssetRecord {
 
-    private final AssetCategory category;
+    private AssetCategory category;
     private final String rawType;
     private final int id;
     private final boolean idValid;
@@ -24,13 +24,14 @@ public final class AssetRecord {
     private final String originKind;
     private final Path assetPath;
     private final String targetGuid;
+    private final AssetCategory targetCategory;
     private final boolean bypassIdLimit;
     private final List<String> notes = new ArrayList<>();
 
     public AssetRecord(AssetCategory category, String rawType, int id, boolean idValid, String rawId,
                        String guid, String internalName, Map<String, String> names,
                        String origin, String originKind, Path assetPath,
-                       String targetGuid, boolean bypassIdLimit) {
+                       String targetGuid, AssetCategory targetCategory, boolean bypassIdLimit) {
         this.category = category;
         this.rawType = rawType == null ? "" : rawType;
         this.id = id;
@@ -43,6 +44,7 @@ public final class AssetRecord {
         this.originKind = originKind;
         this.assetPath = assetPath;
         this.targetGuid = targetGuid == null ? "" : targetGuid;
+        this.targetCategory = targetCategory;
         this.bypassIdLimit = bypassIdLimit;
     }
 
@@ -94,6 +96,16 @@ public final class AssetRecord {
         return targetGuid;
     }
 
+    /** 重定向资产声明的目标类别（VehicleRedirectorAsset 恒为载具，通用 Redirector 读 AssetCategory 字段）。 */
+    public AssetCategory getTargetCategory() {
+        return targetCategory;
+    }
+
+    /** 仅供扫描后处理：把重定向资产归入其目标类别分区（如载具）。 */
+    public void overrideCategory(AssetCategory category) {
+        this.category = category;
+    }
+
     public boolean isBypassIdLimit() {
         return bypassIdLimit;
     }
@@ -114,11 +126,11 @@ public final class AssetRecord {
 
     /** 英文名优先，其余语言按字母序以 | 连接；无任何语言文件时回退内部名。 */
     public String displayName() {
-        String joined = joinedNames();
-        return joined.isEmpty() ? internalName : joined;
+        return joinNames(names, internalName);
     }
 
-    public String joinedNames() {
+    /** 静态版名称拼接：英文优先，其余语言按字母序以 | 连接，空时回退 fallback。 */
+    public static String joinNames(Map<String, String> names, String fallback) {
         List<String> ordered = new ArrayList<>();
         names.entrySet().stream()
                 .filter(entry -> "english".equalsIgnoreCase(entry.getKey()))
@@ -130,7 +142,8 @@ public final class AssetRecord {
                 .sorted(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER))
                 .map(Map.Entry::getValue)
                 .forEach(ordered::add);
-        return String.join("|", ordered);
+        String joined = String.join("|", ordered);
+        return joined.isEmpty() ? fallback : joined;
     }
 
     @Override
