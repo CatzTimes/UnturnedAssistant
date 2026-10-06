@@ -50,10 +50,53 @@ if (Test-Path $AppDir) {
         throw "无法删除旧的 app-image 目录: $AppDir（请确认 UnturnedAssistant 未在运行后重试）"
     }
 }
-# 把 Resources/assets/icon.jpg 转成多尺寸 .ico 供 exe 使用
+# 把 Resources/assets/icon.jpg 转成多尺寸 .ico（System.Drawing + PNG 条目 ICO，纯构建脚本实现）
 $IconPath = Join-Path $Out 'icon.ico'
-& (Join-Path $Jdk27 'bin\java.exe') -cp $Classes io.tools.IcoGenerator (Join-Path $Root 'Resources\assets\icon.jpg') $IconPath
-if ($LASTEXITCODE -ne 0) { throw '图标转换失败' }
+Add-Type -AssemblyName System.Drawing
+$iconSrc = [System.Drawing.Image]::FromFile((Join-Path $Root 'Resources\assets\icon.jpg'))
+try {
+    $sizes = @(16, 24, 32, 48, 64) | Where-Object { $_ -le [Math]::Max($iconSrc.Width, $iconSrc.Height) }
+    $sizeList = New-Object 'System.Collections.Generic.List[int]'
+    $pngList = New-Object 'System.Collections.Generic.List[byte[]]'
+    foreach ($s in $sizes) {
+        $bmp = New-Object System.Drawing.Bitmap($s, $s)
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $g.DrawImage($iconSrc, 0, 0, $s, $s)
+        $g.Dispose()
+        $pngMs = New-Object System.IO.MemoryStream
+        $bmp.Save($pngMs, [System.Drawing.Imaging.ImageFormat]::Png)
+        $bmp.Dispose()
+        $sizeList.Add($s)
+        $pngList.Add($pngMs.ToArray())
+    }
+    # ICO 容器 = 6 字节头 + N×16 字节目录项 + N 张 PNG（BinaryWriter 天然小端序）
+    $ms = New-Object System.IO.MemoryStream
+    $bw = New-Object System.IO.BinaryWriter($ms)
+    $bw.Write([uint16]0)
+    $bw.Write([uint16]1)
+    $bw.Write([uint16]$pngList.Count)
+    $offset = 6 + 16 * $pngList.Count
+    for ($i = 0; $i -lt $pngList.Count; $i++) {
+        $s = $sizeList[$i]
+        $dim = if ($s -ge 256) { 0 } else { $s }
+        $bw.Write([byte]$dim)
+        $bw.Write([byte]$dim)
+        $bw.Write([byte]0)
+        $bw.Write([byte]0)
+        $bw.Write([uint16]1)
+        $bw.Write([uint16]32)
+        $bw.Write([uint32]$pngList[$i].Length)
+        $bw.Write([uint32]$offset)
+        $offset += $pngList[$i].Length
+    }
+    foreach ($p in $pngList) { $bw.Write($p) }
+    $bw.Flush()
+    [IO.File]::WriteAllBytes($IconPath, $ms.ToArray())
+} finally {
+    $iconSrc.Dispose()
+}
+if (-not (Test-Path $IconPath)) { throw '图标转换失败' }
 & (Join-Path $Jdk27 'bin\jpackage.exe') --type app-image `
     --input $Stage --main-jar 'UnturnedAssistant.jar' --main-class 'Start' `
     --name 'UnturnedAssistant' --app-version $Version --vendor 'CatzTimes' `
