@@ -165,9 +165,24 @@ public final class AssetRecord {
         return toDisplayString(true);
     }
 
+    /** 类型名与分区同名的类别（如载具区的 [Vehicle]）：展示时属冗余，省略。 */
+    private static final Map<AssetCategory, String> GENERIC_TYPE_NAMES = Map.ofEntries(
+            Map.entry(AssetCategory.VEHICLE, "vehicle"),
+            Map.entry(AssetCategory.ANIMAL, "animal"),
+            Map.entry(AssetCategory.RESOURCE, "resource"),
+            Map.entry(AssetCategory.EFFECT, "effect"),
+            Map.entry(AssetCategory.SKIN, "skin"),
+            Map.entry(AssetCategory.MYTHIC, "mythic"),
+            Map.entry(AssetCategory.SPAWN, "spawn"),
+            Map.entry(AssetCategory.DIALOGUE, "dialogue"),
+            Map.entry(AssetCategory.QUEST, "quest"),
+            Map.entry(AssetCategory.VENDOR, "vendor"),
+            Map.entry(AssetCategory.NPC, "npc"));
+
     /**
      * 单行展示：ID 名称 [Type] (来源) [GUID] 备注。
-     * includeOrigin=false 时省略来源；有短 ID 时 GUID 冗余省略（仅无 ID 资产展示）。
+     * includeOrigin=false 时省略来源；有短 ID 时 GUID 冗余省略（仅无 ID 资产展示）；
+     * 类型名与所属分区同名时省略（如载具区的 [Vehicle]）；
      * 重定向行展示为 "内部名 → 目标名"，不显示长类型名与无本地化备注。
      */
     public String toDisplayString(boolean includeOrigin) {
@@ -180,7 +195,9 @@ public final class AssetRecord {
             }
         } else {
             sb.append(displayName());
-            if (!rawType.isEmpty()) {
+            String generic = GENERIC_TYPE_NAMES.get(category);
+            boolean redundantType = generic != null && generic.equalsIgnoreCase(rawType);
+            if (!rawType.isEmpty() && !redundantType) {
                 sb.append("  [").append(rawType).append(']');
             }
         }
